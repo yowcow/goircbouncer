@@ -1,0 +1,7 @@
+version: '3'
+
+services:
+  ngircd:
+    image: densuke/ngircd
+    ports:
+      - '6667:6667'

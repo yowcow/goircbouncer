@@ -1,0 +1,13 @@
+server:
+  host:         hoge
+  addr:         :1234
+  secure:       true
+  user:         foouser
+  nick:         foonick
+  channels:
+    - '#foo'
+    - '#bar'
+
+client:
+  addr:         :2345
+  password:     hogefuga
