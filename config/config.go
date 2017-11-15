@@ -28,8 +28,9 @@ type Client struct {
 
 // Config represents a configuration
 type Config struct {
-	Server *Server `yaml:"server"`
-	Client *Client `yaml:"client"`
+	TimeZone string  `yaml:"timezone"`
+	Server   *Server `yaml:"server"`
+	Client   *Client `yaml:"client"`
 }
 
 // Load loads config from a given YAML file

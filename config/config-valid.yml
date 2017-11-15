@@ -1,3 +1,5 @@
+timezone: "Asia/Tokyo"
+
 server:
   host:         hoge
   addr:         :1234

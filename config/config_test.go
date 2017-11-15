@@ -34,6 +34,8 @@ func TestLoad_returns_config_on_valid_yaml(t *testing.T) {
 	assert.Nil(t, err)
 	assert.NotNil(t, cfg)
 
+	assert.Equal(t, "Asia/Tokyo", cfg.TimeZone)
+
 	assert.Equal(t, "hoge", cfg.Server.Host)
 	assert.Equal(t, ":1234", cfg.Server.Addr)
 	assert.Equal(t, true, cfg.Server.Secure)
