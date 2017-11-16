@@ -16,6 +16,7 @@ type Server struct {
 	Password    string   `yaml:"password"`
 	User        string   `yaml:"user"`
 	Nick        string   `yaml:"nick"`
+	Mode        int      `yaml:"mode"`
 	Channels    []string `yaml:"channels"`
 }
 

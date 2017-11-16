@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"net"
+	_ "sync"
 	"time"
 
 	"github.com/yowcow/goircbouncer/config"
@@ -12,23 +13,23 @@ import (
 	parser "github.com/yowcow/goircparser"
 )
 
-type EventHandler func(w io.Writer, row *parser.Row)
+type EventHandler func(w io.Writer, row *parser.Row) bool
 
 type Events map[string]EventHandler
 
 type ServerConn struct {
 	cfg    *config.Config
 	logger *log.Logger
-	quit   chan<- bool
 	events Events
 }
 
-func New(cfg *config.Config, logger *log.Logger, quit chan<- bool) *ServerConn {
-	events := make(Events)
-	events["PING"] = func(w io.Writer, row *parser.Row) {
+func New(cfg *config.Config, logger *log.Logger) *ServerConn {
+	s := &ServerConn{cfg, logger, make(Events)}
+	s.RegisterEvent("PING", func(w io.Writer, row *parser.Row) bool {
 		command.Pong(w, "", "", row.Suffix)
-	}
-	return &ServerConn{cfg, logger, quit, events}
+		return true
+	})
+	return s
 }
 
 func (s *ServerConn) RegisterEvent(command string, function EventHandler) {
@@ -37,62 +38,53 @@ func (s *ServerConn) RegisterEvent(command string, function EventHandler) {
 
 func (s ServerConn) Start() {
 	for {
-		conn, err := net.Dial("tcp", s.cfg.Server.Host+s.cfg.Server.Addr)
-		if err != nil {
+		if err := s.ConnectOnce(); err != nil {
 			s.logger.Println("failed connecting to server: ", err)
-		} else {
-			if err = s.handleConn(conn); err != nil {
-				s.logger.Println("failed while handling a connection to server: ", err)
-			}
 		}
-		s.logger.Println("retrying in 10 secs")
-		time.Sleep(time.Second * 10)
+		s.logger.Println("retrying in 10 seconds")
+		time.Sleep(10 * time.Second)
 	}
 }
 
-func (s ServerConn) handleConn(conn net.Conn) error {
+func (s ServerConn) ConnectOnce() error {
+	conn, err := net.Dial("tcp", s.cfg.Server.Host+s.cfg.Server.Addr)
+	if err != nil {
+		return err
+	}
 	defer conn.Close()
-
-	command.Nick(conn, s.cfg.Server.Nick)
-	command.User(conn, s.cfg.Server.User, 0, s.cfg.Server.User)
-	if len(s.cfg.Server.Channels) > 0 {
-		command.Join(conn, s.cfg.Server.Channels, []string{})
-	}
-
-	comChan := make(chan *parser.Row)
-	errChan := make(chan error)
-	go watchConn(conn, comChan, errChan)
-
+	r := bufio.NewReader(conn)
 	w := bufio.NewWriter(conn)
-	for {
-		select {
-		case row := <-comChan:
-			if f, ok := s.events[row.Command]; ok {
-				f(w, row)
-				w.Flush()
-				s.logger.Println("handled event: ", row.Command)
-			} else {
-				s.logger.Println(row.RawLine)
-			}
-		case err := <-errChan:
-			close(errChan)
-			close(comChan)
-			return err
-		}
-	}
-
-	return nil
+	s.initConn(w)
+	return s.watchConn(r, w)
 }
 
-func watchConn(conn net.Conn, comChan chan<- *parser.Row, errChan chan<- error) {
-	r := bufio.NewReader(conn)
+func (s ServerConn) initConn(w *bufio.Writer) {
+	command.Nick(w, s.cfg.Server.Nick)
+	command.User(w, s.cfg.Server.User, s.cfg.Server.Mode, s.cfg.Server.User)
+	if len(s.cfg.Server.Channels) > 0 {
+		command.Join(w, s.cfg.Server.Channels, []string{})
+	}
+	w.Flush()
+}
+
+func (s ServerConn) watchConn(r *bufio.Reader, w *bufio.Writer) error {
 	for {
 		line, _, err := r.ReadLine()
 		if err != nil {
-			errChan <- err
-			return
+			return err
 		}
 		row := parser.Parse(string(line))
-		comChan <- row
+		s.logger.Println(row.RawLine)
+		if wrote := s.handleRow(w, row); wrote {
+			w.Flush()
+		}
 	}
+	return nil
+}
+
+func (s ServerConn) handleRow(w io.Writer, row *parser.Row) bool {
+	if f, ok := s.events[row.Command]; ok {
+		return f(w, row)
+	}
+	return false
 }

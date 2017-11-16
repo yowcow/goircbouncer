@@ -24,12 +24,10 @@ func main() {
 	}
 
 	logger := log.New(os.Stdout, "", log.LstdFlags|log.Lshortfile)
-	quit := make(chan bool)
-	svr := serverconn.New(cfg, logger, quit)
-	svr.RegisterEvent("PRIVMSG", func(w io.Writer, row *parser.Row) {
-		logger.Println(row.RawLine)
+	svr := serverconn.New(cfg, logger)
+	svr.RegisterEvent("PRIVMSG", func(w io.Writer, row *parser.Row) bool {
 		command.Notice(w, row.Params[0], fmt.Sprintf("You said '%s'", row.Suffix))
+		return true
 	})
-	go svr.Start()
-	<-quit
+	svr.Start()
 }
